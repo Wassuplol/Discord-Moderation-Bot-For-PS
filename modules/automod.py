@@ -1,6 +1,7 @@
 """
 Auto-moderation module for OpenMod bot
 Implements automatic moderation features
+Version 1.1 - Optimizations and fixes
 """
 
 import discord
@@ -10,6 +11,7 @@ import asyncio
 import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Set
+import time
 
 from utils.helpers import (
     is_mention_spam, 
@@ -19,6 +21,8 @@ from utils.helpers import (
     create_embed
 )
 from core.config import Config
+from core.version import __version__
+
 
 class AutoModCog(commands.Cog, name="AutoMod"):
     """Auto-moderation commands and functionality"""
@@ -30,6 +34,9 @@ class AutoModCog(commands.Cog, name="AutoMod"):
         # Track message spam (user_id -> [message_times])
         self.message_spam_tracker: Dict[int, List[datetime]] = {}
         self.anti_invite_cache: Set[str] = set()  # Cache for invite codes
+        self.link_spam_tracker: Dict[int, List[datetime]] = {}  # Track users posting links
+        self.duplicate_message_tracker: Dict[int, Dict[str, int]] = {}  # Track duplicate messages
+        self.raid_detection_cache: Set[int] = set()  # Track potential raiders
         
         # Start background tasks
         self.cleanup_spam_tracker.start()
@@ -44,6 +51,7 @@ class AutoModCog(commands.Cog, name="AutoMod"):
         current_time = datetime.utcnow()
         cutoff_time = current_time - timedelta(seconds=Config.SPAM_THRESHOLD_SECONDS + 10)
         
+        # Clean up message spam tracker
         for user_id in list(self.message_spam_tracker.keys()):
             # Filter out old timestamps
             self.message_spam_tracker[user_id] = [
@@ -54,6 +62,17 @@ class AutoModCog(commands.Cog, name="AutoMod"):
             # Remove user if no recent messages
             if not self.message_spam_tracker[user_id]:
                 del self.message_spam_tracker[user_id]
+        
+        # Clean up link spam tracker
+        cutoff_time = current_time - timedelta(seconds=Config.SPAM_THRESHOLD_SECONDS + 10)
+        for user_id in list(self.link_spam_tracker.keys()):
+            self.link_spam_tracker[user_id] = [
+                time for time in self.link_spam_tracker[user_id]
+                if time > cutoff_time
+            ]
+            
+            if not self.link_spam_tracker[user_id]:
+                del self.link_spam_tracker[user_id]
     
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -74,6 +93,14 @@ class AutoModCog(commands.Cog, name="AutoMod"):
         if await self.check_mention_spam(message):
             return  # Message was handled as mention spam
             
+        # Check for link spam
+        if await self.check_link_spam(message):
+            return  # Message was handled as link spam
+            
+        # Check for duplicate messages
+        if await self.check_duplicate_messages(message):
+            return  # Message was handled as duplicate spam
+            
         # Check for invites
         if await self.check_invites(message):
             return  # Message was handled as invite spam
@@ -81,6 +108,23 @@ class AutoModCog(commands.Cog, name="AutoMod"):
         # Check for word filtering
         if await self.check_word_filter(message):
             return  # Message was handled by word filter
+    
+    @commands.Cog.listener()
+    async def on_member_join(self, member: discord.Member):
+        """Listen for member joins to detect potential raids"""
+        if not member.guild:
+            return
+            
+        # Check if this is potentially part of a raid
+        now = datetime.utcnow()
+        recent_joins = [
+            m for m in member.guild.members 
+            if (now - m.joined_at).seconds < 60  # Joined in the last minute
+        ]
+        
+        if len(recent_joins) >= Config.RAID_DETECTION_THRESHOLD:
+            # Potential raid detected
+            await self.handle_raid(member.guild, recent_joins)
     
     async def check_spam(self, message: discord.Message) -> bool:
         """Check if a message is part of spam"""
@@ -113,6 +157,59 @@ class AutoModCog(commands.Cog, name="AutoMod"):
             return True
         return False
     
+    async def check_link_spam(self, message: discord.Message) -> bool:
+        """Check if a message contains link spam"""
+        # Check if message contains URLs
+        url_pattern = re.compile(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+')
+        urls = url_pattern.findall(message.content)
+        
+        if not urls:
+            return False
+        
+        user_id = message.author.id
+        current_time = datetime.utcnow()
+        
+        # Add current link post time to tracker
+        if user_id not in self.link_spam_tracker:
+            self.link_spam_tracker[user_id] = []
+        
+        self.link_spam_tracker[user_id].append(current_time)
+        
+        # Check if user has posted too many links recently
+        recent_links = [
+            time for time in self.link_spam_tracker[user_id]
+            if (current_time - time).seconds <= Config.SPAM_THRESHOLD_SECONDS
+        ]
+        
+        if len(recent_links) > Config.LINK_SPAM_THRESHOLD:
+            await self.handle_link_spam(message)
+            return True
+        
+        return False
+    
+    async def check_duplicate_messages(self, message: discord.Message) -> bool:
+        """Check if a message is a duplicate (copy-paste spam)"""
+        user_id = message.author.id
+        message_content = message.content.strip().lower()
+        
+        if user_id not in self.duplicate_message_tracker:
+            self.duplicate_message_tracker[user_id] = {}
+        
+        # Add or increment count for this message content
+        if message_content in self.duplicate_message_tracker[user_id]:
+            self.duplicate_message_tracker[user_id][message_content] += 1
+        else:
+            self.duplicate_message_tracker[user_id][message_content] = 1
+        
+        # If this message has been repeated too many times
+        if self.duplicate_message_tracker[user_id][message_content] > Config.DUPLICATE_MESSAGE_THRESHOLD:
+            await self.handle_duplicate_spam(message)
+            # Reset counter after handling
+            self.duplicate_message_tracker[user_id][message_content] = 0
+            return True
+        
+        return False
+    
     async def check_invites(self, message: discord.Message) -> bool:
         """Check if a message contains Discord invites"""
         # Look for invite patterns in the message
@@ -131,7 +228,7 @@ class AutoModCog(commands.Cog, name="AutoMod"):
                     # If we can't fetch the invite, assume it's unwanted
                     await self.handle_invite(message)
                     return True
-    
+        
         return False
     
     async def check_word_filter(self, message: discord.Message) -> bool:
@@ -231,6 +328,97 @@ class AutoModCog(commands.Cog, name="AutoMod"):
             # We don't have permission to delete the message
             self.logger.warning(f"Could not delete mention spam message from {message.author} due to permission issues")
     
+    async def handle_link_spam(self, message: discord.Message):
+        """Handle a link spam message"""
+        try:
+            # Delete the link spam message
+            await message.delete()
+            
+            # Warn the user
+            try:
+                dm_embed = create_embed(
+                    title="Link Spam Detected",
+                    description=f"Your message in **{message.guild.name}** was deleted for link spam",
+                    color=discord.Color.red(),
+                    fields=[
+                        {"name": "Message", "value": message.content[:100] + "..." if len(message.content) > 100 else message.content, "inline": False},
+                        {"name": "Action", "value": "Message deleted", "inline": True}
+                    ]
+                )
+                await message.author.send(embed=dm_embed)
+            except discord.Forbidden:
+                # User has DMs disabled
+                pass
+            
+            # Log the incident
+            guild_config = await self.bot.get_guild_config(message.guild.id)
+            mod_channel_id = guild_config.get('moderation_channel_id')
+            if mod_channel_id:
+                mod_channel = message.guild.get_channel(mod_channel_id)
+                if mod_channel:
+                    embed = create_embed(
+                        title="Link Spam Detected",
+                        description=f"{message.author.mention} was detected for link spam",
+                        color=discord.Color.red(),
+                        fields=[
+                            {"name": "User", "value": f"{message.author} ({message.author.id})", "inline": True},
+                            {"name": "Channel", "value": message.channel.mention, "inline": True},
+                            {"name": "Links", "value": f"Detected", "inline": True},
+                            {"name": "Message", "value": message.content[:100] + "..." if len(message.content) > 100 else message.content, "inline": False}
+                        ]
+                    )
+                    await mod_channel.send(embed=embed)
+            
+            self.logger.info(f"Link spam detected from {message.author} in {message.guild.name}")
+        except discord.Forbidden:
+            # We don't have permission to delete the message
+            self.logger.warning(f"Could not delete link spam message from {message.author} due to permission issues")
+    
+    async def handle_duplicate_spam(self, message: discord.Message):
+        """Handle a duplicate spam message"""
+        try:
+            # Delete the duplicate spam message
+            await message.delete()
+            
+            # Warn the user
+            try:
+                dm_embed = create_embed(
+                    title="Duplicate Message Spam Detected",
+                    description=f"Your message in **{message.guild.name}** was deleted for duplicate spam",
+                    color=discord.Color.red(),
+                    fields=[
+                        {"name": "Message", "value": message.content[:100] + "..." if len(message.content) > 100 else message.content, "inline": False},
+                        {"name": "Action", "value": "Message deleted", "inline": True}
+                    ]
+                )
+                await message.author.send(embed=dm_embed)
+            except discord.Forbidden:
+                # User has DMs disabled
+                pass
+            
+            # Log the incident
+            guild_config = await self.bot.get_guild_config(message.guild.id)
+            mod_channel_id = guild_config.get('moderation_channel_id')
+            if mod_channel_id:
+                mod_channel = message.guild.get_channel(mod_channel_id)
+                if mod_channel:
+                    embed = create_embed(
+                        title="Duplicate Spam Detected",
+                        description=f"{message.author.mention} was detected for duplicate message spam",
+                        color=discord.Color.red(),
+                        fields=[
+                            {"name": "User", "value": f"{message.author} ({message.author.id})", "inline": True},
+                            {"name": "Channel", "value": message.channel.mention, "inline": True},
+                            {"name": "Message", "value": message.content[:100] + "..." if len(message.content) > 100 else message.content, "inline": False}
+                        ]
+                    )
+                    await mod_channel.send(embed=embed)
+            
+            self.logger.info(f"Duplicate spam detected from {message.author} in {message.guild.name}")
+        except discord.Forbidden:
+            # We don't have permission to delete the message
+            self.logger.warning(f"Could not delete duplicate spam message from {message.author} due to permission issues")
+    
     async def handle_invite(self, message: discord.Message):
         """Handle a message containing an invite"""
         try:
@@ -276,19 +464,46 @@ class AutoModCog(commands.Cog, name="AutoMod"):
             # We don't have permission to delete the message
             self.logger.warning(f"Could not delete invite message from {message.author} due to permission issues")
     
-    @commands.command(name='automod')
+    async def handle_raid(self, guild: discord.Guild, members: List[discord.Member]):
+        """Handle potential raid situation"""
+        self.logger.info(f"Potential raid detected in {guild.name} with {len(members)} members joining rapidly")
+        
+        # Get the moderation channel
+        guild_config = await self.bot.get_guild_config(guild.id)
+        mod_channel_id = guild_config.get('moderation_channel_id')
+        if mod_channel_id:
+            mod_channel = guild.get_channel(mod_channel_id)
+            if mod_channel:
+                embed = create_embed(
+                    title="Potential Raid Detected",
+                    description=f"Multiple users joined rapidly in {guild.name}",
+                    color=discord.Color.red(),
+                    fields=[
+                        {"name": "Users", "value": f"{len(members)} users", "inline": True},
+                        {"name": "Action", "value": "Monitor situation", "inline": True}
+                    ]
+                )
+                await mod_channel.send(embed=embed)
+        
+        # Optionally implement automatic actions like server lockdown
+        # This would be configurable per server
+    
+    @commands.hybrid_command(name='automod', description="Configure auto-moderation settings")
     @commands.has_permissions(manage_guild=True)
     async def automod_config(self, ctx: commands.Context, setting: str = None, value: str = None):
         """Configure auto-moderation settings"""
         if not setting:
             # Show current settings
             embed = create_embed(
-                title="Auto-Moderation Settings",
+                title=f"Auto-Moderation Settings - v{__version__}",
                 description="Current auto-mod settings for this server",
                 color=discord.Color.blue(),
                 fields=[
                     {"name": "Spam Threshold", "value": f"{Config.SPAM_THRESHOLD_MESSAGES} messages in {Config.SPAM_THRESHOLD_SECONDS} seconds", "inline": False},
                     {"name": "Mention Spam Threshold", "value": f"{Config.MENTION_SPAM_THRESHOLD} mentions", "inline": False},
+                    {"name": "Link Spam Threshold", "value": f"{Config.LINK_SPAM_THRESHOLD} links in {Config.SPAM_THRESHOLD_SECONDS} seconds", "inline": False},
+                    {"name": "Duplicate Message Threshold", "value": f"{Config.DUPLICATE_MESSAGE_THRESHOLD} duplicates", "inline": False},
+                    {"name": "Raid Detection Threshold", "value": f"{Config.RAID_DETECTION_THRESHOLD} members in 1 minute", "inline": False},
                     {"name": "Auto-mod Enabled", "value": str(Config.ENABLE_AUTO_MOD), "inline": False}
                 ]
             )

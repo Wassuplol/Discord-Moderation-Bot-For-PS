@@ -17,6 +17,7 @@ from core.bot import OpenModBot
 from core.config import Config
 from core.database import DatabaseManager
 from core.logger import setup_logging
+from core.version import __version__
 
 # Load environment variables
 load_dotenv()
@@ -46,7 +47,7 @@ bot = OpenModBot(
     case_insensitive=True,
     help_command=None,  # We'll implement a custom help system
     owner_id=Config.BOT_OWNER_ID,
-    description="OpenMod - The Completely Free, Open-Source Discord Moderation Bot"
+    description=f"OpenMod v{__version__} - The Completely Free, Open-Source Discord Moderation Bot"
 )
 
 async def main():

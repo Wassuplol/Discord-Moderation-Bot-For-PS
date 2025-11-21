@@ -1,6 +1,21 @@
-# OpenMod - The Completely Free, Open-Source Discord Moderation Bot
+# OpenMod v1.1 - The Completely Free, Open-Source Discord Moderation Bot
 
 **OpenMod** is a top-tier Discord moderation bot that provides ALL premium features other bots lock behind paywalls (Dyno, Carl-bot, MEE6, Wick, etc.), but 100% FREE FOREVER. No hidden costs, no premium tiers, no feature limitations.
+
+## New in Version 1.1
+
+### Enhanced Moderation Features
+- **Hybrid Commands**: All commands now support both slash commands and traditional text commands
+- **Advanced Spam Detection**: New link spam, duplicate message spam, and raid detection systems
+- **Improved Auto-Moderation**: Enhanced filters with better accuracy and performance
+- **Better Logging**: More detailed moderation logs with improved tracking
+- **Performance Optimizations**: Improved response times and memory usage
+
+### Version 1.1 Fixes
+- Fixed issues with command permissions and validation
+- Improved error handling and user feedback
+- Enhanced database connection management
+- Better rate limiting and anti-abuse mechanisms
 
 ## Features
 
@@ -13,6 +28,9 @@
 - Word filtering with regex support
 - Anti-bot verification
 - Voice channel spam protection
+- Duplicate message detection
+- Link spam prevention
+- Raid detection and mitigation
 
 ### Comprehensive Logging System
 - Message edit/delete logs
@@ -21,6 +39,8 @@
 - Channel modification logs
 - Moderation action logs
 - Bulk delete detection
+- User activity tracking
+- Command usage analytics
 
 ### Moderation Commands
 - `warn`, `mute`, `kick`, `ban`, `unban`
@@ -28,6 +48,8 @@
 - `lockdown` and `unlock` for emergency protection
 - `slowmode` with channel-specific settings
 - `nick` and `role` management
+- `infraction` to view user history
+- `clean` to remove specific content types
 
 ### Customization & Automation
 - Custom commands system
