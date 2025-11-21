@@ -15,6 +15,7 @@ from discord.ext.commands import when_mentioned_or
 
 from core.config import Config
 from utils.helpers import get_cog_list
+from core.version import __version__
 
 class OpenModBot(commands.Bot):
     """
@@ -61,7 +62,7 @@ class OpenModBot(commands.Bot):
         await self.change_presence(
             activity=discord.Activity(
                 type=discord.ActivityType.watching,
-                name="your server | 100% Free & Open Source"
+                name=f"your server | v{__version__} | 100% Free & Open Source"
             )
         )
         

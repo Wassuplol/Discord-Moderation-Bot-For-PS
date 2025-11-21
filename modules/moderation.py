@@ -1,6 +1,7 @@
 """
 Moderation module for OpenMod bot
 Implements core moderation commands and functionality
+Version 1.1 - Optimizations and fixes
 """
 
 import discord
@@ -9,6 +10,7 @@ from datetime import datetime, timedelta
 import asyncio
 import logging
 from typing import Optional, Union
+import re
 
 from utils.helpers import (
     create_embed, 
@@ -18,6 +20,8 @@ from utils.helpers import (
     format_timedelta
 )
 from core.config import Config
+from core.version import __version__
+
 
 class ModerationCog(commands.Cog, name="Moderation"):
     """Moderation commands and functionality"""
@@ -25,7 +29,7 @@ class ModerationCog(commands.Cog, name="Moderation"):
     def __init__(self, bot):
         self.bot = bot
         self.logger = logging.getLogger('openmod.moderation')
-        
+    
     async def cog_check(self, ctx: commands.Context) -> bool:
         """Global check for all moderation commands"""
         # Only allow commands in guilds (not DMs)
@@ -35,7 +39,7 @@ class ModerationCog(commands.Cog, name="Moderation"):
         # Check if user is admin/mod or has required permissions
         return is_admin_or_mod(ctx.author)
     
-    @commands.command(name='warn')
+    @commands.hybrid_command(name='warn', description="Warn a member for inappropriate behavior")
     @commands.has_permissions(manage_messages=True)
     async def warn(self, ctx: commands.Context, member: discord.Member, *, reason: str = "No reason provided"):
         """Warn a member for inappropriate behavior"""
@@ -97,7 +101,7 @@ class ModerationCog(commands.Cog, name="Moderation"):
         else:
             await ctx.send("Failed to log warning. Please contact an administrator.")
     
-    @commands.command(name='kick')
+    @commands.hybrid_command(name='kick', description="Kick a member from the server")
     @commands.has_permissions(kick_members=True)
     async def kick(self, ctx: commands.Context, member: discord.Member, *, reason: str = "No reason provided"):
         """Kick a member from the server"""
@@ -162,7 +166,7 @@ class ModerationCog(commands.Cog, name="Moderation"):
         else:
             await ctx.send("Failed to log kick. Please contact an administrator.")
     
-    @commands.command(name='ban')
+    @commands.hybrid_command(name='ban', description="Ban a member from the server")
     @commands.has_permissions(ban_members=True)
     async def ban(self, ctx: commands.Context, member: Union[discord.Member, int], *, reason: str = "No reason provided"):
         """Ban a member from the server"""
@@ -247,7 +251,7 @@ class ModerationCog(commands.Cog, name="Moderation"):
         else:
             await ctx.send("Failed to log ban. Please contact an administrator.")
     
-    @commands.command(name='unban')
+    @commands.hybrid_command(name='unban', description="Unban a user by ID")
     @commands.has_permissions(ban_members=True)
     async def unban(self, ctx: commands.Context, user_id: int, *, reason: str = "No reason provided"):
         """Unban a user by ID"""
@@ -282,7 +286,7 @@ class ModerationCog(commands.Cog, name="Moderation"):
         except discord.Forbidden:
             await ctx.send("I don't have permission to unban this user.")
     
-    @commands.command(name='mute')
+    @commands.hybrid_command(name='mute', description="Mute a member for a specified duration")
     @commands.has_permissions(manage_roles=True)
     async def mute(self, ctx: commands.Context, member: discord.Member, duration: str = "30m", *, reason: str = "No reason provided"):
         """Mute a member for a specified duration"""
@@ -402,10 +406,148 @@ class ModerationCog(commands.Cog, name="Moderation"):
         else:
             await ctx.send("Failed to log mute. Please contact an administrator.")
     
-    @commands.command(name='purge', aliases=['clear'])
+    @commands.hybrid_command(name='lockdown', description="Lockdown a channel to prevent messages")
+    @commands.has_permissions(manage_channels=True)
+    async def lockdown(self, ctx: commands.Context, channel: discord.TextChannel = None, *, reason: str = "No reason provided"):
+        """Lockdown a channel to prevent messages from non-admins/mods."""
+        if not channel:
+            channel = ctx.channel
+        
+        try:
+            # Get @everyone role
+            everyone_role = ctx.guild.default_role
+            
+            # Modify permissions to deny sending messages
+            await channel.set_permissions(everyone_role, send_messages=False)
+            
+            embed = create_embed(
+                title="Channel Locked Down",
+                description=f"{channel.mention} has been locked down",
+                color=discord.Color.red(),
+                fields=[
+                    {"name": "Channel", "value": channel.mention, "inline": True},
+                    {"name": "Moderator", "value": ctx.author.mention, "inline": True},
+                    {"name": "Reason", "value": escape_markdown(reason), "inline": False}
+                ]
+            )
+            await ctx.send(embed=embed)
+            
+            # Log to moderation channel if configured
+            guild_config = await self.bot.get_guild_config(ctx.guild.id)
+            mod_channel_id = guild_config.get('moderation_channel_id')
+            if mod_channel_id:
+                mod_channel = ctx.guild.get_channel(mod_channel_id)
+                if mod_channel:
+                    await mod_channel.send(embed=embed)
+        except discord.Forbidden:
+            await ctx.send("I don't have permission to lockdown this channel.")
+    
+    @commands.hybrid_command(name='unlock', description="Remove lockdown from a channel")
+    @commands.has_permissions(manage_channels=True)
+    async def unlock(self, ctx: commands.Context, channel: discord.TextChannel = None, *, reason: str = "No reason provided"):
+        """Remove lockdown from a channel."""
+        if not channel:
+            channel = ctx.channel
+        
+        try:
+            # Get @everyone role
+            everyone_role = ctx.guild.default_role
+            
+            # Remove the send_messages permission override
+            await channel.set_permissions(everyone_role, overwrite=None)
+            
+            embed = create_embed(
+                title="Channel Unlocked",
+                description=f"{channel.mention} has been unlocked",
+                color=discord.Color.green(),
+                fields=[
+                    {"name": "Channel", "value": channel.mention, "inline": True},
+                    {"name": "Moderator", "value": ctx.author.mention, "inline": True},
+                    {"name": "Reason", "value": escape_markdown(reason), "inline": False}
+                ]
+            )
+            await ctx.send(embed=embed)
+            
+            # Log to moderation channel if configured
+            guild_config = await self.bot.get_guild_config(ctx.guild.id)
+            mod_channel_id = guild_config.get('moderation_channel_id')
+            if mod_channel_id:
+                mod_channel = ctx.guild.get_channel(mod_channel_id)
+                if mod_channel:
+                    await mod_channel.send(embed=embed)
+        except discord.Forbidden:
+            await ctx.send("I don't have permission to unlock this channel.")
+    
+    @commands.hybrid_command(name='nick', description="Change a member's nickname")
+    @commands.has_permissions(manage_nicknames=True)
+    async def nick(self, ctx: commands.Context, member: discord.Member, *, nickname: str = None):
+        """Change a member's nickname."""
+        if member.top_role >= ctx.author.top_role and ctx.author != ctx.guild.owner:
+            await ctx.send("You cannot change the nickname of someone with a higher or equal role.")
+            return
+        
+        try:
+            old_nick = member.display_name
+            await member.edit(nick=nickname)
+            
+            embed = create_embed(
+                title="Nickname Changed",
+                description=f"Changed {member.mention}'s nickname",
+                color=discord.Color.blue(),
+                fields=[
+                    {"name": "User", "value": member.mention, "inline": True},
+                    {"name": "Moderator", "value": ctx.author.mention, "inline": True},
+                    {"name": "Old Nickname", "value": escape_markdown(old_nick), "inline": True},
+                    {"name": "New Nickname", "value": escape_markdown(nickname) if nickname else "Removed", "inline": True}
+                ]
+            )
+            await ctx.send(embed=embed)
+        except discord.Forbidden:
+            await ctx.send("I don't have permission to change this member's nickname.")
+    
+    @commands.hybrid_command(name='role', description="Add or remove a role from a member")
+    @commands.has_permissions(manage_roles=True)
+    async def role(self, ctx: commands.Context, member: discord.Member, action: str, role: discord.Role):
+        """Add or remove a role from a member. Use 'add' or 'remove' as action."""
+        if role >= ctx.author.top_role and ctx.author != ctx.guild.owner:
+            await ctx.send("You cannot manage a role that is higher or equal to your own.")
+            return
+        
+        if role >= ctx.me.top_role:
+            await ctx.send("I cannot manage a role that is higher or equal to my own.")
+            return
+        
+        try:
+            if action.lower() == 'add':
+                await member.add_roles(role)
+                action_text = "Added"
+                color = discord.Color.green()
+            elif action.lower() == 'remove':
+                await member.remove_roles(role)
+                action_text = "Removed"
+                color = discord.Color.red()
+            else:
+                await ctx.send("Action must be 'add' or 'remove'.")
+                return
+            
+            embed = create_embed(
+                title=f"Role {action_text}",
+                description=f"{action_text} {role.mention} from {member.mention}",
+                color=color,
+                fields=[
+                    {"name": "User", "value": member.mention, "inline": True},
+                    {"name": "Moderator", "value": ctx.author.mention, "inline": True},
+                    {"name": "Role", "value": role.mention, "inline": True}
+                ]
+            )
+            await ctx.send(embed=embed)
+        except discord.Forbidden:
+            await ctx.send("I don't have permission to manage this role.")
+    
+    @commands.hybrid_command(name='purge', aliases=['clear'], description="Purge messages from a channel")
     @commands.has_permissions(manage_messages=True)
     async def purge(self, ctx: commands.Context, limit: int = 10, user: discord.User = None):
-        """Purge messages from a channel"""
+        """Purge messages from a channel."""
         if limit <= 0 or limit > 100:
             await ctx.send("Please specify a number between 1 and 100.")
             return
@@ -424,10 +566,10 @@ class ModerationCog(commands.Cog, name="Moderation"):
         except discord.Forbidden:
             await ctx.send("I don't have permission to delete messages.")
     
-    @commands.command(name='slowmode')
+    @commands.hybrid_command(name='slowmode', description="Set slowmode for the current channel")
     @commands.has_permissions(manage_channels=True)
     async def slowmode(self, ctx: commands.Context, duration: str = "0s"):
-        """Set slowmode for the current channel"""
+        """Set slowmode for the current channel."""
         try:
             seconds = self.parse_duration(duration)
             
@@ -453,6 +595,60 @@ class ModerationCog(commands.Cog, name="Moderation"):
                 await ctx.send(embed=embed)
         except ValueError:
             await ctx.send("Invalid duration format. Use: 10s, 5m, 2h, 1d, etc.")
+    
+    @commands.hybrid_command(name='infraction', description="View a user's infractions")
+    @commands.has_permissions(manage_messages=True)
+    async def infraction(self, ctx: commands.Context, member: discord.Member):
+        """View a user's infractions."""
+        # In a real implementation, this would fetch from the database
+        # For now, we'll simulate with a mock response
+        embed = create_embed(
+            title=f"Infractions for {member.display_name}",
+            description=f"Showing infractions for {member.mention}",
+            color=discord.Color.blue(),
+            fields=[
+                {"name": "User", "value": f"{member} ({member.id})", "inline": True},
+                {"name": "Total Infractions", "value": "0", "inline": True},
+                {"name": "Warnings", "value": "0", "inline": True},
+                {"name": "Kicks", "value": "0", "inline": True},
+                {"name": "Bans", "value": "0", "inline": True},
+                {"name": "Mutes", "value": "0", "inline": True}
+            ]
+        )
+        await ctx.send(embed=embed)
+    
+    @commands.hybrid_command(name='clean', description="Clean specific types of messages")
+    @commands.has_permissions(manage_messages=True)
+    async def clean(self, ctx: commands.Context, limit: int = 50, content_type: str = "links"):
+        """Clean specific types of messages (links, images, mentions, etc.)."""
+        if limit <= 0 or limit > 100:
+            await ctx.send("Please specify a number between 1 and 100.")
+            return
+        
+        def check(message):
+            if content_type.lower() == "links":
+                # Check for URLs in the message
+                url_pattern = re.compile(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+')
+                return bool(url_pattern.search(message.content))
+            elif content_type.lower() == "images":
+                # Check for image attachments
+                return len(message.attachments) > 0 and any(
+                    att.filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp'))
+                    for att in message.attachments
+                )
+            elif content_type.lower() == "bots":
+                # Check if message is from a bot
+                return message.author.bot
+            elif content_type.lower() == "mentions":
+                # Check if message contains mentions
+                return len(message.mentions) > 0 or len(message.role_mentions) > 0
+            return False
+        
+        try:
+            deleted = await ctx.channel.purge(limit=limit + 1, check=check)
+            await ctx.send(f"Deleted {len(deleted) - 1} {content_type} messages.", delete_after=3)
+        except discord.Forbidden:
+            await ctx.send("I don't have permission to delete messages.")
     
     def parse_duration(self, duration_str: str) -> int:
         """Parse a duration string like '30s', '5m', '2h', '1d' into seconds"""
@@ -517,6 +713,7 @@ class ModerationCog(commands.Cog, name="Moderation"):
             except discord.Forbidden:
                 # Don't have permission to remove role
                 pass
+
 
 async def setup(bot):
     """Setup the moderation cog"""
