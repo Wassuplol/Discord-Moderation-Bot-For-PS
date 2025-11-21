@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  bot:
+    build: .
+    container_name: openmod_bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://openmod:openmod@db:5432/openmod
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+    depends_on:
+      - db
+    networks:
+      - openmod_network
+
+  db:
+    image: postgres:15-alpine
+    container_name: openmod_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: openmod
+      POSTGRES_USER: openmod
+      POSTGRES_PASSWORD: openmod
+    volumes:
+      - openmod_db_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - openmod_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: openmod_redis
+    restart: unless-stopped
+    volumes:
+      - openmod_redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - openmod_network
+
+networks:
+  openmod_network:
+    driver: bridge
+
+volumes:
+  openmod_db_data:
+  openmod_redis_data:
