@@ -1,6 +1,7 @@
 """
 OpenMod - The Completely Free, Open-Source Discord Moderation Bot
 MIT License - 2023 OpenMod
+Version 1.1.5 - Bug fixes and optimizations
 """
 
 import os
@@ -25,20 +26,18 @@ load_dotenv()
 # Set up logging
 setup_logging()
 
-# Initialize bot
+# Initialize bot with optimized intents
 intents = discord.Intents.default()
 intents.message_content = True  # Required for moderation features
 intents.members = True
-intents.presences = True
-intents.voice_states = True
 intents.bans = True
 intents.emojis_and_stickers = True
-intents.integrations = True
-intents.webhooks = True
 intents.invites = True
 intents.reactions = True
 intents.typing = False  # We don't need typing events
 intents.guild_scheduled_events = True
+intents.presences = False  # Disable presences to reduce resource usage
+intents.voice_states = False  # Disable voice states unless needed
 
 # Bot instance
 bot = OpenModBot(
