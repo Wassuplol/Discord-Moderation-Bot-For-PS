@@ -1,7 +1,7 @@
 """
 Auto-moderation module for OpenMod bot
 Implements automatic moderation features
-Version 1.1 - Optimizations and fixes
+Version 1.1.5 - Bug fixes and optimizations
 """
 
 import discord

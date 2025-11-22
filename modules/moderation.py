@@ -1,7 +1,7 @@
 """
 Moderation module for OpenMod bot
 Implements core moderation commands and functionality
-Version 1.1 - Optimizations and fixes
+Version 1.1.5 - Bug fixes and optimizations
 """
 
 import discord

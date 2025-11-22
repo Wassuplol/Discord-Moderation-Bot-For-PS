@@ -1,6 +1,7 @@
 """
 Stream Notifications Module for OpenMod Discord Bot
 Handles YouTube, Twitch, and Kick streaming notifications
+Version 1.1.5 - Bug fixes and optimizations
 """
 import discord
 from discord.ext import commands, tasks

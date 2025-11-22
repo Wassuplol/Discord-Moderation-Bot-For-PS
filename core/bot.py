@@ -1,6 +1,7 @@
 """
 Core bot class for OpenMod
 Handles bot initialization, event handling, and module loading
+Version 1.1.5 - Bug fixes and optimizations
 """
 
 import os
@@ -45,7 +46,7 @@ class OpenModBot(commands.Bot):
         
     async def setup_hook(self):
         """Called when the bot is starting up"""
-        self.logger.info("OpenMod Bot is starting up...")
+        self.logger.info(f"OpenMod Bot v{__version__} is starting up...")
         self.stats['start_time'] = discord.utils.utcnow()
         
         # Load all cogs automatically
@@ -99,6 +100,10 @@ class OpenModBot(commands.Bot):
             await ctx.send("You don't have permission to use this command.")
         elif isinstance(error, commands.BotMissingPermissions):
             await ctx.send("I don't have the required permissions to execute this command.")
+        elif isinstance(error, commands.CommandOnCooldown):
+            await ctx.send(f"Command is on cooldown. Try again in {error.retry_after:.2f} seconds.")
+        elif isinstance(error, commands.NoPrivateMessage):
+            await ctx.send("This command cannot be used in private messages.")
         else:
             self.logger.error(f"Error in command {ctx.command}: {error}")
             await ctx.send("An error occurred while executing the command.")
@@ -160,6 +165,7 @@ class OpenModBot(commands.Bot):
         """Get guild-specific configuration"""
         if guild_id not in self.guild_configs:
             # In a real implementation, this would fetch from the database
+            # Add cache expiration to prevent memory leaks
             self.guild_configs[guild_id] = {
                 'prefix': Config.BOT_PREFIX,
                 'moderation_channels': [],
