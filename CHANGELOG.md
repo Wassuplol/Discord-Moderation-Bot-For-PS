@@ -2,6 +2,16 @@
 
 All notable changes to OpenMod Discord Bot will be documented in this file.
 
+## [1.1.1] - 2025-11-22
+
+### Added
+- **Stream Notifications**: 
+  - YouTube video upload notifications (via RSS feeds)
+  - Twitch streaming alerts (placeholder implementation)
+  - Kick streaming alerts (placeholder implementation)
+  - `stream add/remove/list/test` commands for managing stream notifications
+  - Database model for tracking streamers and their notification settings
+
 ## [1.1.0] - 2025-11-22
 
 ### Added
