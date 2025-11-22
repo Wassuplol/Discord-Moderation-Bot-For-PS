@@ -1,7 +1,7 @@
 """
 OpenMod - The Completely Free, Open-Source Discord Moderation Bot
 MIT License - 2023 OpenMod
-Version 1.1.5 - Bug fixes and optimizations
+Version 2.0.0 - Essential Discord Moderation Features
 """
 
 import os

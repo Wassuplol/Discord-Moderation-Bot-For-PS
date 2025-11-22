@@ -1,10 +1,51 @@
-# OpenMod v1.1.1 - The Completely Free, Open-Source Discord Moderation Bot
+# OpenMod v2.0 - The Completely Free, Open-Source Discord Moderation Bot
 
 **OpenMod** is a top-tier Discord moderation bot that provides ALL premium features other bots lock behind paywalls (Dyno, Carl-bot, MEE6, Wick, etc.), but 100% FREE FOREVER. No hidden costs, no premium tiers, no feature limitations.
 
-## New in Version 1.1
+## New in Version 2.0
 
-### Enhanced Moderation Features
+### Essential Discord Moderation Features
+- **Advanced Ticket System**: Complete ticket management with persistent views, multiple issue types, and transcript generation
+- **Reaction Roles**: Persistent reaction role buttons with easy setup and management
+- **Auto-Responder**: Customizable auto-responder with regex support and case sensitivity options
+- **Custom Commands**: User-defined commands with usage tracking and analytics
+- **Member Verification**: Enhanced verification system with button-based verification
+- **Enhanced Database**: SQLAlchemy-based database with models for all new features
+- **Improved Security**: Enhanced permission checks and input validation
+- **Better Error Handling**: Comprehensive error handling across all modules
+
+### Ticket System
+- Create tickets with multiple issue types (General Support, Report User, Technical Issue, Appeal, Other)
+- Persistent ticket creation buttons
+- Ticket management commands for admins
+- Transcript generation and logging
+- User limits on ticket creation
+
+### Reaction Roles
+- Persistent reaction role buttons
+- Easy setup with embed creation
+- Support for multiple reaction roles per message
+- Management commands for adding/removing reaction roles
+
+### Auto-Responder
+- Create custom responses to trigger phrases
+- Support for regex patterns
+- Case sensitivity options
+- Enable/disable individual auto-responders
+
+### Custom Commands
+- Create custom commands with user-defined responses
+- Usage tracking and analytics
+- Command information and management
+- Creator attribution
+
+### Member Verification
+- Button-based verification system
+- Join tracking and verification status
+- DM notifications for new members
+- Verification status checking
+
+### Version 1.1 Features (Carried Forward)
 - **Hybrid Commands**: All commands now support both slash commands and traditional text commands
 - **Advanced Spam Detection**: New link spam, duplicate message spam, and raid detection systems
 - **Improved Auto-Moderation**: Enhanced filters with better accuracy and performance
@@ -12,7 +53,7 @@
 - **Performance Optimizations**: Improved response times and memory usage
 - **Stream Notifications**: YouTube, Twitch, and Kick streaming notifications
 
-### Version 1.1 Fixes
+### Version 1.1 Fixes (Carried Forward)
 - Fixed issues with command permissions and validation
 - Improved error handling and user feedback
 - Enhanced database connection management

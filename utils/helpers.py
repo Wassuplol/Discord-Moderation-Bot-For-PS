@@ -238,14 +238,19 @@ def get_cog_list() -> List[str]:
     # This is a placeholder - in a real implementation, this would scan the modules directory
     return [
         'moderation',
-        'utility',
+        'utility', 
         'logging',
         'automod',
         'leveling',
         'tickets',
         'giveaways',
         'suggestions',
-        'polls'
+        'polls',
+        'ticket',  # v2.0 addition
+        'reaction_roles',  # v2.0 addition
+        'auto_responder',  # v2.0 addition
+        'custom_commands',  # v2.0 addition
+        'verification'  # v2.0 addition
     ]
 
 def validate_user_input(text: str, max_length: int = 1000, allowed_chars: str = None) -> bool:

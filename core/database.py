@@ -288,6 +288,360 @@ class DatabaseManager:
                 self.logger.error(f"Error getting user data: {e}")
                 return None
 
+    async def create_ticket(self, guild_id: int, channel_id: int, user_id: int, 
+                          issue_type: str, subject: str, description: str) -> bool:
+        """Create a new ticket"""
+        async with self.async_session() as session:
+            try:
+                ticket = Ticket(
+                    guild_id=guild_id,
+                    channel_id=channel_id,
+                    user_id=user_id,
+                    issue_type=issue_type,
+                    subject=subject,
+                    description=description
+                )
+                session.add(ticket)
+                await session.commit()
+                return True
+            except Exception as e:
+                self.logger.error(f"Error creating ticket: {e}")
+                await session.rollback()
+                return False
+
+    async def get_ticket(self, ticket_id: int) -> Optional[Dict[str, Any]]:
+        """Get a ticket by ID"""
+        async with self.async_session() as session:
+            try:
+                result = await session.execute(
+                    select(Ticket).filter(Ticket.id == ticket_id)
+                )
+                ticket = result.scalar_one_or_none()
+                return ticket.to_dict() if ticket else None
+            except Exception as e:
+                self.logger.error(f"Error getting ticket: {e}")
+                return None
+
+    async def get_ticket_by_channel(self, channel_id: int) -> Optional[Dict[str, Any]]:
+        """Get a ticket by channel ID"""
+        async with self.async_session() as session:
+            try:
+                result = await session.execute(
+                    select(Ticket).filter(Ticket.channel_id == channel_id)
+                )
+                ticket = result.scalar_one_or_none()
+                return ticket.to_dict() if ticket else None
+            except Exception as e:
+                self.logger.error(f"Error getting ticket by channel: {e}")
+                return None
+
+    async def get_user_open_tickets(self, user_id: int) -> int:
+        """Get number of open tickets for a user"""
+        async with self.async_session() as session:
+            try:
+                result = await session.execute(
+                    select(Ticket).filter(
+                        Ticket.user_id == user_id,
+                        Ticket.status == 'open'
+                    )
+                )
+                tickets = result.scalars().all()
+                return len(tickets)
+            except Exception as e:
+                self.logger.error(f"Error getting user open tickets: {e}")
+                return 0
+
+    async def close_ticket(self, ticket_id: int) -> bool:
+        """Close a ticket"""
+        async with self.async_session() as session:
+            try:
+                result = await session.execute(
+                    select(Ticket).filter(Ticket.id == ticket_id)
+                )
+                ticket = result.scalar_one_or_none()
+                
+                if ticket:
+                    ticket.status = 'closed'
+                    ticket.closed_at = datetime.utcnow()
+                    await session.commit()
+                    return True
+                return False
+            except Exception as e:
+                self.logger.error(f"Error closing ticket: {e}")
+                await session.rollback()
+                return False
+
+    async def set_ticket_config(self, guild_id: int, category_id: int, support_role_id: int = None, 
+                              log_channel_id: int = None, transcript_channel_id: int = None) -> bool:
+        """Set ticket configuration for a guild"""
+        async with self.async_session() as session:
+            try:
+                # Check if config already exists
+                result = await session.execute(
+                    select(TicketConfig).filter(TicketConfig.guild_id == guild_id)
+                )
+                config = result.scalar_one_or_none()
+                
+                if config:
+                    # Update existing config
+                    config.category_id = category_id
+                    config.support_role_id = support_role_id
+                    config.log_channel_id = log_channel_id
+                    config.transcript_channel_id = transcript_channel_id
+                    config.updated_at = datetime.utcnow()
+                else:
+                    # Create new config
+                    config = TicketConfig(
+                        guild_id=guild_id,
+                        category_id=category_id,
+                        support_role_id=support_role_id,
+                        log_channel_id=log_channel_id,
+                        transcript_channel_id=transcript_channel_id
+                    )
+                    session.add(config)
+                
+                await session.commit()
+                return True
+            except Exception as e:
+                self.logger.error(f"Error setting ticket config: {e}")
+                await session.rollback()
+                return False
+
+    async def get_ticket_config(self, guild_id: int) -> Optional[Dict[str, Any]]:
+        """Get ticket configuration for a guild"""
+        async with self.async_session() as session:
+            try:
+                result = await session.execute(
+                    select(TicketConfig).filter(TicketConfig.guild_id == guild_id)
+                )
+                config = result.scalar_one_or_none()
+                return config.to_dict() if config else None
+            except Exception as e:
+                self.logger.error(f"Error getting ticket config: {e}")
+                return None
+
+    async def create_reaction_role(self, guild_id: int, message_id: int, channel_id: int, 
+                                emoji: str, role_id: int) -> bool:
+        """Create a reaction role"""
+        async with self.async_session() as session:
+            try:
+                reaction_role = ReactionRole(
+                    guild_id=guild_id,
+                    message_id=message_id,
+                    channel_id=channel_id,
+                    emoji=emoji,
+                    role_id=role_id
+                )
+                session.add(reaction_role)
+                await session.commit()
+                return True
+            except Exception as e:
+                self.logger.error(f"Error creating reaction role: {e}")
+                await session.rollback()
+                return False
+
+    async def get_guild_reaction_roles(self, guild_id: int) -> List[Dict[str, Any]]:
+        """Get all reaction roles for a guild"""
+        async with self.async_session() as session:
+            try:
+                result = await session.execute(
+                    select(ReactionRole).filter(ReactionRole.guild_id == guild_id)
+                )
+                reaction_roles = result.scalars().all()
+                return [rr.to_dict() for rr in reaction_roles]
+            except Exception as e:
+                self.logger.error(f"Error getting guild reaction roles: {e}")
+                return []
+
+    async def delete_reaction_role(self, guild_id: int, message_id: int, emoji: str) -> bool:
+        """Delete a reaction role"""
+        async with self.async_session() as session:
+            try:
+                result = await session.execute(
+                    select(ReactionRole).filter(
+                        ReactionRole.guild_id == guild_id,
+                        ReactionRole.message_id == message_id,
+                        ReactionRole.emoji == emoji
+                    )
+                )
+                reaction_role = result.scalar_one_or_none()
+                
+                if reaction_role:
+                    await session.delete(reaction_role)
+                    await session.commit()
+                    return True
+                return False
+            except Exception as e:
+                self.logger.error(f"Error deleting reaction role: {e}")
+                await session.rollback()
+                return False
+
+    async def create_auto_responder(self, guild_id: int, trigger: str, response: str, 
+                                  enabled: bool = True, case_sensitive: bool = False, 
+                                  regex: bool = False) -> bool:
+        """Create an auto-responder"""
+        async with self.async_session() as session:
+            try:
+                auto_responder = AutoResponder(
+                    guild_id=guild_id,
+                    trigger=trigger,
+                    response=response,
+                    enabled=enabled,
+                    case_sensitive=case_sensitive,
+                    regex=regex
+                )
+                session.add(auto_responder)
+                await session.commit()
+                return True
+            except Exception as e:
+                self.logger.error(f"Error creating auto-responder: {e}")
+                await session.rollback()
+                return False
+
+    async def get_guild_auto_responders(self, guild_id: int) -> List[Dict[str, Any]]:
+        """Get all auto-responders for a guild"""
+        async with self.async_session() as session:
+            try:
+                result = await session.execute(
+                    select(AutoResponder).filter(
+                        AutoResponder.guild_id == guild_id,
+                        AutoResponder.enabled == True
+                    )
+                )
+                auto_responders = result.scalars().all()
+                return [ar.to_dict() for ar in auto_responders]
+            except Exception as e:
+                self.logger.error(f"Error getting guild auto-responders: {e}")
+                return []
+
+    async def create_custom_command(self, guild_id: int, command_name: str, response: str, 
+                                  created_by: int) -> bool:
+        """Create a custom command"""
+        async with self.async_session() as session:
+            try:
+                custom_command = CustomCommand(
+                    guild_id=guild_id,
+                    command_name=command_name.lower(),
+                    response=response,
+                    created_by=created_by
+                )
+                session.add(custom_command)
+                await session.commit()
+                return True
+            except Exception as e:
+                self.logger.error(f"Error creating custom command: {e}")
+                await session.rollback()
+                return False
+
+    async def get_custom_command(self, guild_id: int, command_name: str) -> Optional[Dict[str, Any]]:
+        """Get a custom command"""
+        async with self.async_session() as session:
+            try:
+                result = await session.execute(
+                    select(CustomCommand).filter(
+                        CustomCommand.guild_id == guild_id,
+                        CustomCommand.command_name == command_name.lower(),
+                        CustomCommand.enabled == True
+                    )
+                )
+                command = result.scalar_one_or_none()
+                return command.to_dict() if command else None
+            except Exception as e:
+                self.logger.error(f"Error getting custom command: {e}")
+                return None
+
+    async def increment_custom_command_usage(self, command_id: int) -> bool:
+        """Increment custom command usage count"""
+        async with self.async_session() as session:
+            try:
+                result = await session.execute(
+                    select(CustomCommand).filter(CustomCommand.id == command_id)
+                )
+                command = result.scalar_one_or_none()
+                
+                if command:
+                    command.uses += 1
+                    await session.commit()
+                    return True
+                return False
+            except Exception as e:
+                self.logger.error(f"Error incrementing command usage: {e}")
+                await session.rollback()
+                return False
+
+    async def get_guild_custom_commands(self, guild_id: int) -> List[Dict[str, Any]]:
+        """Get all custom commands for a guild"""
+        async with self.async_session() as session:
+            try:
+                result = await session.execute(
+                    select(CustomCommand).filter(
+                        CustomCommand.guild_id == guild_id,
+                        CustomCommand.enabled == True
+                    )
+                )
+                commands = result.scalars().all()
+                return [cmd.to_dict() for cmd in commands]
+            except Exception as e:
+                self.logger.error(f"Error getting guild custom commands: {e}")
+                return []
+
+    async def create_member_verification(self, guild_id: int, user_id: int, 
+                                      verification_method: str = 'manual') -> bool:
+        """Create a member verification record"""
+        async with self.async_session() as session:
+            try:
+                verification = MemberVerification(
+                    guild_id=guild_id,
+                    user_id=user_id,
+                    verification_method=verification_method
+                )
+                session.add(verification)
+                await session.commit()
+                return True
+            except Exception as e:
+                self.logger.error(f"Error creating member verification: {e}")
+                await session.rollback()
+                return False
+
+    async def get_member_verification(self, guild_id: int, user_id: int) -> Optional[Dict[str, Any]]:
+        """Get member verification record"""
+        async with self.async_session() as session:
+            try:
+                result = await session.execute(
+                    select(MemberVerification).filter(
+                        MemberVerification.guild_id == guild_id,
+                        MemberVerification.user_id == user_id
+                    )
+                )
+                verification = result.scalar_one_or_none()
+                return verification.to_dict() if verification else None
+            except Exception as e:
+                self.logger.error(f"Error getting member verification: {e}")
+                return None
+
+    async def verify_member(self, guild_id: int, user_id: int) -> bool:
+        """Mark a member as verified"""
+        async with self.async_session() as session:
+            try:
+                result = await session.execute(
+                    select(MemberVerification).filter(
+                        MemberVerification.guild_id == guild_id,
+                        MemberVerification.user_id == user_id
+                    )
+                )
+                verification = result.scalar_one_or_none()
+                
+                if verification:
+                    verification.verified = True
+                    verification.verified_at = datetime.utcnow()
+                    await session.commit()
+                    return True
+                return False
+            except Exception as e:
+                self.logger.error(f"Error verifying member: {e}")
+                await session.rollback()
+                return False
+
 
 class StreamNotification(Base):
     """Stream notification model for tracking YouTube, Twitch, and Kick channels"""
@@ -318,4 +672,159 @@ class StreamNotification(Base):
             'is_live': self.is_live,
             'enabled': self.enabled,
             'created_at': self.created_at
+        }
+
+class Ticket(Base):
+    """Ticket model for support tickets"""
+    __tablename__ = 'tickets'
+    
+    id = Column(Integer, primary_key=True)
+    guild_id = Column(BigInteger, nullable=False)
+    channel_id = Column(BigInteger, nullable=False)  # Discord channel for the ticket
+    user_id = Column(BigInteger, nullable=False)  # User who created the ticket
+    issue_type = Column(String(50), nullable=False)  # general, report, tech, appeal, etc.
+    subject = Column(String(200), nullable=False)
+    description = Column(Text, nullable=False)
+    status = Column(String(20), default='open')  # open, closed, pending
+    created_at = Column(DateTime, default=datetime.utcnow)
+    closed_at = Column(DateTime)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'guild_id': self.guild_id,
+            'channel_id': self.channel_id,
+            'user_id': self.user_id,
+            'issue_type': self.issue_type,
+            'subject': self.subject,
+            'description': self.description,
+            'status': self.status,
+            'created_at': self.created_at,
+            'closed_at': self.closed_at
+        }
+
+class TicketConfig(Base):
+    """Ticket configuration model"""
+    __tablename__ = 'ticket_configs'
+    
+    id = Column(Integer, primary_key=True)
+    guild_id = Column(BigInteger, unique=True, nullable=False)
+    category_id = Column(BigInteger, nullable=False)  # Category for ticket channels
+    support_role_id = Column(BigInteger)  # Role for support staff
+    log_channel_id = Column(BigInteger)  # Channel for ticket logs
+    transcript_channel_id = Column(BigInteger)  # Channel for ticket transcripts
+    max_tickets_per_user = Column(Integer, default=3)  # Max tickets per user
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'guild_id': self.guild_id,
+            'category_id': self.category_id,
+            'support_role_id': self.support_role_id,
+            'log_channel_id': self.log_channel_id,
+            'transcript_channel_id': self.transcript_channel_id,
+            'max_tickets_per_user': self.max_tickets_per_user
+        }
+
+class ReactionRole(Base):
+    """Reaction role model"""
+    __tablename__ = 'reaction_roles'
+    
+    id = Column(Integer, primary_key=True)
+    guild_id = Column(BigInteger, nullable=False)
+    message_id = Column(BigInteger, nullable=False)  # Message with reaction roles
+    channel_id = Column(BigInteger, nullable=False)  # Channel containing the message
+    emoji = Column(String(50), nullable=False)  # The emoji that triggers the role
+    role_id = Column(BigInteger, nullable=False)  # The role to assign/remove
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'guild_id': self.guild_id,
+            'message_id': self.message_id,
+            'channel_id': self.channel_id,
+            'emoji': self.emoji,
+            'role_id': self.role_id,
+            'created_at': self.created_at
+        }
+
+class AutoResponder(Base):
+    """Auto-responder model"""
+    __tablename__ = 'auto_responders'
+    
+    id = Column(Integer, primary_key=True)
+    guild_id = Column(BigInteger, nullable=False)
+    trigger = Column(String(200), nullable=False)  # Word/phrase to trigger response
+    response = Column(Text, nullable=False)  # Response to send
+    enabled = Column(Boolean, default=True)
+    case_sensitive = Column(Boolean, default=False)
+    regex = Column(Boolean, default=False)  # Whether to treat trigger as regex
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'guild_id': self.guild_id,
+            'trigger': self.trigger,
+            'response': self.response,
+            'enabled': self.enabled,
+            'case_sensitive': self.case_sensitive,
+            'regex': self.regex,
+            'created_at': self.created_at,
+            'updated_at': self.updated_at
+        }
+
+class CustomCommand(Base):
+    """Custom command model"""
+    __tablename__ = 'custom_commands'
+    
+    id = Column(Integer, primary_key=True)
+    guild_id = Column(BigInteger, nullable=False)
+    command_name = Column(String(100), nullable=False)  # Command name without prefix
+    response = Column(Text, nullable=False)  # Response to send
+    created_by = Column(BigInteger, nullable=False)  # User who created the command
+    uses = Column(Integer, default=0)  # Number of times command was used
+    enabled = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'guild_id': self.guild_id,
+            'command_name': self.command_name,
+            'response': self.response,
+            'created_by': self.created_by,
+            'uses': self.uses,
+            'enabled': self.enabled,
+            'created_at': self.created_at,
+            'updated_at': self.updated_at
+        }
+
+class MemberVerification(Base):
+    """Member verification model"""
+    __tablename__ = 'member_verifications'
+    
+    id = Column(Integer, primary_key=True)
+    guild_id = Column(BigInteger, nullable=False)
+    user_id = Column(BigInteger, nullable=False)
+    verified = Column(Boolean, default=False)
+    joined_at = Column(DateTime, default=datetime.utcnow)
+    verified_at = Column(DateTime)
+    verification_method = Column(String(50))  # manual, captcha, etc.
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'guild_id': self.guild_id,
+            'user_id': self.user_id,
+            'verified': self.verified,
+            'joined_at': self.joined_at,
+            'verified_at': self.verified_at,
+            'verification_method': self.verification_method
         }
