@@ -287,3 +287,35 @@ class DatabaseManager:
             except Exception as e:
                 self.logger.error(f"Error getting user data: {e}")
                 return None
+
+
+class StreamNotification(Base):
+    """Stream notification model for tracking YouTube, Twitch, and Kick channels"""
+    __tablename__ = 'stream_notifications'
+
+    id = Column(Integer, primary_key=True)
+    guild_id = Column(BigInteger, nullable=False)  # Discord server ID
+    discord_channel_id = Column(BigInteger, nullable=False)  # Discord channel to send notifications
+    platform = Column(String(20), nullable=False)  # youtube, twitch, kick
+    channel_id = Column(String(100), nullable=False)  # Platform channel ID/username
+    added_by = Column(BigInteger, nullable=False)  # Discord user ID who added this
+    last_video_id = Column(String(100))  # For YouTube - track last video ID
+    last_stream_id = Column(String(100))  # For Twitch/Kick - track last stream ID
+    is_live = Column(Boolean, default=False)  # Current live status
+    enabled = Column(Boolean, default=True)  # Whether this notification is enabled
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'guild_id': self.guild_id,
+            'discord_channel_id': self.discord_channel_id,
+            'platform': self.platform,
+            'channel_id': self.channel_id,
+            'added_by': self.added_by,
+            'last_video_id': self.last_video_id,
+            'last_stream_id': self.last_stream_id,
+            'is_live': self.is_live,
+            'enabled': self.enabled,
+            'created_at': self.created_at
+        }

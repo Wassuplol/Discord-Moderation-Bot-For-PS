@@ -177,6 +177,46 @@ def is_admin_or_mod(member: discord.Member) -> bool:
     
     return False
 
+
+def is_admin():
+    """Decorator to check if the command invoker is an admin"""
+    async def predicate(ctx: commands.Context) -> bool:
+        if ctx.guild is None:  # DM context
+            return ctx.author.id == ctx.bot.owner_id
+        
+        # Check if user is bot owner
+        if ctx.author.id == ctx.bot.owner_id:
+            return True
+        
+        # Check if user has administrator permission
+        if ctx.author.guild_permissions.administrator:
+            return True
+        
+        # Check for moderator-like permissions
+        mod_permissions = [
+            'manage_guild',
+            'manage_channels',
+            'kick_members',
+            'ban_members',
+            'manage_messages',
+            'manage_roles'
+        ]
+        
+        author_permissions = ctx.channel.permissions_for(ctx.author)
+        for perm in mod_permissions:
+            if getattr(author_permissions, perm, False):
+                return True
+        
+        # Check for roles with "mod", "admin", or "staff" in the name
+        for role in ctx.author.roles:
+            role_name = role.name.lower()
+            if any(keyword in role_name for keyword in ['mod', 'admin', 'staff']):
+                return True
+        
+        return False
+    
+    return commands.check(predicate)
+
 async def safe_delete_message(message: discord.Message, delay: float = 0.0):
     """Safely delete a message with error handling"""
     try:

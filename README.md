@@ -1,4 +1,4 @@
-# OpenMod v1.1 - The Completely Free, Open-Source Discord Moderation Bot
+# OpenMod v1.1.1 - The Completely Free, Open-Source Discord Moderation Bot
 
 **OpenMod** is a top-tier Discord moderation bot that provides ALL premium features other bots lock behind paywalls (Dyno, Carl-bot, MEE6, Wick, etc.), but 100% FREE FOREVER. No hidden costs, no premium tiers, no feature limitations.
 
@@ -10,6 +10,7 @@
 - **Improved Auto-Moderation**: Enhanced filters with better accuracy and performance
 - **Better Logging**: More detailed moderation logs with improved tracking
 - **Performance Optimizations**: Improved response times and memory usage
+- **Stream Notifications**: YouTube, Twitch, and Kick streaming notifications
 
 ### Version 1.1 Fixes
 - Fixed issues with command permissions and validation
@@ -18,6 +19,13 @@
 - Better rate limiting and anti-abuse mechanisms
 
 ## Features
+
+### Stream Notifications
+- YouTube video upload notifications (via RSS feeds)
+- Twitch streaming alerts
+- Kick streaming alerts
+- Configure notification channels per streamer
+- Commands to add/remove/list streamers
 
 ### Advanced Auto-Moderation System
 - Spam detection with configurable thresholds
@@ -50,6 +58,12 @@
 - `nick` and `role` management
 - `infraction` to view user history
 - `clean` to remove specific content types
+
+### Stream Notification Commands
+- `stream add <platform> <channel_id> [discord_channel]` - Add a streamer to monitor (Admin only)
+- `stream remove <platform> <channel_id>` - Remove a streamer from monitoring (Admin only)
+- `stream list` - List all monitored streamers (Admin only)
+- `stream test <platform> <channel_id>` - Test sending a notification (Admin only)
 
 ### Customization & Automation
 - Custom commands system
